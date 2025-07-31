@@ -8,8 +8,8 @@
     justify-content: center;
     font-family: 'ClashDisplay', sans-serif;
     font-size: 1.8rem;
-    font-weight: 900;
-    letter-spacing: 2px;
+    font-weight: 950;
+    letter-spacing: 6px;
   }
   
   .navbar-rectanlge {
@@ -27,13 +27,13 @@
     display: flex;
     flex-direction: row;
     justify-content: center;
-    gap: 25vw;
+    gap: clamp(1rem, 20vw, 30rem);
     list-style-type: none;
     font-family: 'ClashDisplay', sans-serif;
     font-size: 1.1rem;
     font-weight: 450;
     padding: 0;
-    margin: 1rem 0;
+    margin: 1rem 1rem;
   }
   .navbar-item-home{
     font-weight: 750;
@@ -45,6 +45,7 @@
       gap: 1rem;
       align-items: center;
     }
+    
   
     .navbar-title {
       font-size: 1.2rem;
@@ -52,6 +53,10 @@
   
     .navbar-rectanlge {
       height: 10rem;
+
+    }
+    .navbar-item-home {
+      color: var(--color-3);
     }
   }
   

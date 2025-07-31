@@ -1,0 +1,23 @@
+.paper{
+    background-color: #ffffff;
+    width: 50vw;
+    border: solid black;
+    border-radius: 15px;
+    box-shadow: 10px 10px 0px black;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.paper h1{
+    font-family: 'ClashDisplay', sans-serif;
+    font-weight: 700;
+    font-size: clamp(2rem, 3vw, 3rem);
+    margin: 1rem;
+}
+.paper p{
+    font-family: 'ClashDisplay', sans-serif;
+    font-size: clamp(1.2rem, 2vw, 1.5rem);
+    margin: 1rem;
+    text-align: center;
+}
