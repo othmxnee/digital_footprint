@@ -1,0 +1,18 @@
+:root{
+    --color-text:#00000;
+    --color-bg:#FFFBEA;
+    --color-1:#D8FF4A;
+    --color-2:#FF9635;
+    --color-3:#C79FFA;
+
+    --font-robot:"ClashDisplay";
+}
+@font-face {
+    font-family: 'ClashDisplay';
+    src: url('src/assets/fonts/ClashDisplay.ttf') format('truetype');
+
+  
+  }
+  body{
+    background-color: var(--color-bg);
+  }
