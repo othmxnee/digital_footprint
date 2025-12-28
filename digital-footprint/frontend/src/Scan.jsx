@@ -51,38 +51,97 @@ const Scan = () => {
             console.warn('GPU detection failed', e);
         }
 
-        // 3. AdBlock Detection
-        let adBlockEnabled = false;
+        // 3. AdBlock Detection - Enhanced with multiple methods
+        let adBlockStatus = 'unknown'; // 'enabled', 'disabled', or 'unknown'
         try {
+            // Method 1: Test with common ad-related class names
             const adTest = document.createElement('div');
             adTest.innerHTML = '&nbsp;';
-            adTest.className = 'adsbox';
+            adTest.className = 'adsbox ad-banner advertisement';
             adTest.style.position = 'absolute';
             adTest.style.top = '-1000px';
+            adTest.style.height = '1px';
             document.body.appendChild(adTest);
-            // Wait a tick for styles to apply
+
+            // Wait for ad blockers to process
             await new Promise(resolve => setTimeout(resolve, 100));
-            if (adTest.offsetHeight === 0) {
-                adBlockEnabled = true;
+
+            // Check if element was hidden or removed
+            const isHidden = adTest.offsetHeight === 0 ||
+                adTest.offsetWidth === 0 ||
+                window.getComputedStyle(adTest).display === 'none' ||
+                window.getComputedStyle(adTest).visibility === 'hidden';
+
+            if (isHidden) {
+                adBlockStatus = 'enabled';
+            } else {
+                adBlockStatus = 'disabled';
             }
+
             document.body.removeChild(adTest);
         } catch (e) {
             console.warn('AdBlock detection failed', e);
+            adBlockStatus = 'unknown';
         }
 
         // 4. Dark Mode
         const darkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-        // 5. Browser Version
+        // 5. Browser Version & Security Check
         const ua = navigator.userAgent;
         let browserVersion = 'Unknown';
+        let browserName = 'Unknown';
+        let browserVersionNumber = 0;
+        let isOutdated = false;
+
         try {
             const match = ua.match(/(Chrome|Firefox|Safari|Opera|Edg)\/(\d+)/);
             if (match) {
-                browserVersion = `${match[1]} ${match[2]}`;
+                browserName = match[1];
+                browserVersionNumber = parseInt(match[2], 10);
+                browserVersion = `${browserName} ${browserVersionNumber}`;
+
+                // Simple heuristic: Check if browser is outdated
+                const minVersions = {
+                    'Chrome': 120,
+                    'Firefox': 121,
+                    'Safari': 17,
+                    'Edg': 120,
+                    'Opera': 106
+                };
+
+                if (minVersions[browserName] && browserVersionNumber < minVersions[browserName]) {
+                    isOutdated = true;
+                }
             }
         } catch (e) {
             console.warn('Version detection failed', e);
+        }
+
+        // 6. Calculate Entropy/Uniqueness Score
+        let uniquenessScore = 'Low';
+        let entropyBits = 0;
+
+        const factors = [
+            window.screen.width * window.screen.height > 2073600, // High resolution
+            window.screen.colorDepth > 24, // High color depth
+            navigator.hardwareConcurrency > 8, // Many CPU cores
+            navigator.deviceMemory > 8, // High RAM
+            gpuModel !== 'Unknown GPU' && !gpuModel.includes('SwiftShader'), // Real GPU detected
+            navigator.plugins?.length > 5, // Many plugins
+            darkMode, // Dark mode preference
+            canvasHash.length > 0 // Canvas fingerprint available
+        ];
+
+        // Count unique factors
+        entropyBits = factors.filter(Boolean).length * 2;
+
+        if (entropyBits < 8) {
+            uniquenessScore = 'Low';
+        } else if (entropyBits < 14) {
+            uniquenessScore = 'Medium';
+        } else {
+            uniquenessScore = 'High';
         }
 
         return {
@@ -94,9 +153,12 @@ const Scan = () => {
             device_memory: navigator.deviceMemory,
             canvas_hash: canvasHash,
             gpu_model: gpuModel,
-            ad_block: adBlockEnabled,
+            ad_block_status: adBlockStatus,
             dark_mode: darkMode,
-            browser_version: browserVersion
+            browser_version: browserVersion,
+            browser_outdated: isOutdated,
+            uniqueness_score: uniquenessScore,
+            entropy_bits: entropyBits
         };
     };
 
@@ -106,7 +168,6 @@ const Scan = () => {
             const newTips = [];
             let idCounter = 1;
 
-            // Check 1: HTTPS (Frontend check)
             if (window.location.protocol !== 'https:') {
                 newTips.push({
                     number: idCounter++,
@@ -115,7 +176,6 @@ const Scan = () => {
                 });
             }
 
-            // Check 2: Browser Privacy
             const browser = deviceInfo.browser?.toLowerCase() || '';
             if (browser.includes('chrome')) {
                 newTips.push({
@@ -125,7 +185,6 @@ const Scan = () => {
                 });
             }
 
-            // Check 3: OS Privacy
             const os = deviceInfo.os?.toLowerCase() || '';
             if (os.includes('windows')) {
                 newTips.push({
@@ -135,7 +194,6 @@ const Scan = () => {
                 });
             }
 
-            // Check 4: Public IP
             if (deviceInfo.ip_address && deviceInfo.ip_address !== '127.0.0.1') {
                 newTips.push({
                     number: idCounter++,
@@ -144,38 +202,65 @@ const Scan = () => {
                 });
             }
 
-            // Advanced Checks
             if (deviceInfo.is_advanced) {
-                // Check 5: AdBlock
-                if (!deviceInfo.ad_block) {
+                if (deviceInfo.ad_block_status === 'disabled') {
                     newTips.push({
                         number: idCounter++,
-                        title: 'Block Trackers',
-                        text: 'No AdBlock detected. Install uBlock Origin to stop trackers.'
+                        title: 'Install AdBlock',
+                        text: 'No AdBlock detected. Install uBlock Origin to block ads and trackers.'
+                    });
+                } else if (deviceInfo.ad_block_status === 'enabled') {
+                    newTips.push({
+                        number: idCounter++,
+                        title: 'AdBlock Active',
+                        text: 'Great! Your AdBlock is protecting you from trackers and malicious ads.'
                     });
                 }
 
-                // Check 6: Browser Version (Simple heuristic)
-                if (deviceInfo.browser_version && deviceInfo.browser_version !== 'Unknown') {
-                    // This is a very basic check, in production you'd compare against latest versions
-                    // For now, we just advise keeping it updated
+                if (deviceInfo.browser_outdated) {
                     newTips.push({
                         number: idCounter++,
-                        title: 'Update Browser',
-                        text: `Ensure ${deviceInfo.browser_version} is up to date to patch vulnerabilities.`
+                        title: 'Update Browser Now',
+                        text: `Your ${deviceInfo.browser_version} is outdated. Update immediately to patch security vulnerabilities.`
+                    });
+                } else if (deviceInfo.browser_version && deviceInfo.browser_version !== 'Unknown') {
+                    newTips.push({
+                        number: idCounter++,
+                        title: 'Browser Up to Date',
+                        text: `${deviceInfo.browser_version} appears current. Keep auto-updates enabled.`
                     });
                 }
 
-                // Check 7: GPU Fingerprinting
-                if (deviceInfo.gpu_model && deviceInfo.gpu_model !== 'Unknown GPU') {
+                if (deviceInfo.gpu_model && deviceInfo.gpu_model !== 'Unknown GPU' && !deviceInfo.gpu_model.includes('SwiftShader')) {
                     newTips.push({
                         number: idCounter++,
-                        title: 'GPU Fingerprint',
-                        text: 'Your GPU model can be used to track you across the web.'
+                        title: 'GPU Fingerprinting Risk',
+                        text: `Your GPU (${deviceInfo.gpu_model.substring(0, 30)}...) can uniquely identify you. Consider privacy extensions.`
+                    });
+                }
+
+                if (deviceInfo.dark_mode !== undefined) {
+                    newTips.push({
+                        number: idCounter++,
+                        title: 'Theme Preference Tracked',
+                        text: `Your ${deviceInfo.dark_mode ? 'dark' : 'light'} mode preference adds to your fingerprint.`
+                    });
+                }
+
+                if (deviceInfo.uniqueness_score === 'High') {
+                    newTips.push({
+                        number: idCounter++,
+                        title: 'Highly Unique Device',
+                        text: 'Your device fingerprint is very unique, making you easy to track. Use Tor Browser for anonymity.'
+                    });
+                } else if (deviceInfo.uniqueness_score === 'Medium') {
+                    newTips.push({
+                        number: idCounter++,
+                        title: 'Moderate Uniqueness',
+                        text: 'Your fingerprint has moderate uniqueness. Privacy extensions can help reduce tracking.'
                     });
                 }
             } else {
-                // Default tip if basic scan and few tips found
                 if (newTips.length < 2) {
                     newTips.push({
                         number: idCounter++,
@@ -187,7 +272,6 @@ const Scan = () => {
 
             setTips(newTips);
         } else {
-            // Default tips before scan
             setTips([
                 { number: 1, title: 'Use a VPN', text: 'Hide your IP address from trackers.' },
                 { number: 2, title: 'Update Browser', text: 'Keep your browser updated for security.' },
@@ -197,18 +281,15 @@ const Scan = () => {
         }
     }, [deviceInfo]);
 
-    // Handle Device Scan (no input required)
     const handleDeviceScan = async () => {
         setDeviceLoading(true);
         setDeviceError(null);
         setDeviceInfo(null);
 
         try {
-            // Basic scan first
             const data = await deviceScan();
             let info = data.device_info;
 
-            // If advanced mode, collect and merge extra data
             if (scanMode === 'advanced') {
                 const advancedData = await getAdvancedFingerprint();
                 info = { ...info, ...advancedData, is_advanced: true };
@@ -222,7 +303,6 @@ const Scan = () => {
         }
     };
 
-    // Handle Breach Check
     const handleBreachCheck = async () => {
         if (!emailInput.trim()) {
             setBreachError('Please enter an email address');
@@ -251,13 +331,12 @@ const Scan = () => {
     return (
         <div className='scan-container'>
             {/* Device Scan Section */}
-            <div className="scan-section device-scan-section">
+            <div id="device-scan" className="scan-section device-scan-section">
                 <div className="section-header">
-                    <h2>🔍 Device Fingerprint Scan</h2>
+                    <h2>Device Fingerprint Scan</h2>
                     <p>Discover what information your device reveals</p>
                 </div>
 
-                {/* Scan Mode Toggle */}
                 <div className="scan-mode-toggle">
                     <label className={`mode-option ${scanMode === 'basic' ? 'active' : ''}`}>
                         <input
@@ -283,27 +362,30 @@ const Scan = () => {
 
                 {scanMode === 'advanced' && (
                     <div className="advanced-warning">
-                        <small>⚠️ Advanced scan reveals more metadata (Canvas, Screen, Timezone). This info is NOT stored.</small>
+                        <div className="warning-header">Advanced Scan Notice</div>
+                        <small>
+                            Advanced scanning reveals more metadata used by trackers including:
+                            <strong> GPU model, AdBlock status, theme preference, browser version, screen details, timezone, and language.</strong>
+                            <br />
+                            This information is <strong>NOT stored</strong> and only used to show you local security insights.
+                        </small>
                     </div>
                 )}
 
                 <div className="scan-action">
                     <Buttonn
-                        text={deviceLoading ? '🔄 Scanning...' : '🚀 Scan My Device'}
+                        text={deviceLoading ? 'Scanning...' : 'Scan My Device'}
                         onClick={handleDeviceScan}
                         disabled={deviceLoading}
                     />
                 </div>
 
-                {/* Privacy Trust Message */}
                 <div className="privacy-trust">
-                    <span className="lock-icon">🔒</span>
                     <span>Your data is only checked, never stored. <Link to="/privacy">Read Privacy Policy</Link></span>
                 </div>
 
                 {deviceError && (
                     <div className="result-card error-card">
-                        <div className="card-icon">❌</div>
                         <div className="card-content">
                             <h3>Error</h3>
                             <p>{deviceError}</p>
@@ -314,66 +396,105 @@ const Scan = () => {
                 {deviceInfo && (
                     <div className="result-card success-card">
                         <div className="card-header">
-                            <div className="card-icon">✅</div>
                             <h3>Device Information Detected</h3>
                         </div>
                         <div className="info-grid">
                             <div className="info-item">
-                                <span className="info-label">🌐 IP Address:</span>
+                                <span className="info-label">IP Address:</span>
                                 <span className="info-value">{deviceInfo.ip_address}</span>
                             </div>
                             <div className="info-item">
-                                <span className="info-label">💻 Device:</span>
+                                <span className="info-label">Device:</span>
                                 <span className="info-value">{deviceInfo.device_name}</span>
                             </div>
                             <div className="info-item">
-                                <span className="info-label">🌍 Browser:</span>
+                                <span className="info-label">Browser:</span>
                                 <span className="info-value">{deviceInfo.browser}</span>
                             </div>
                             <div className="info-item">
-                                <span className="info-label">🖥️ OS:</span>
+                                <span className="info-label">OS:</span>
                                 <span className="info-value">{deviceInfo.os}</span>
                             </div>
                             <div className="info-item">
-                                <span className="info-label">📱 Type:</span>
+                                <span className="info-label">Type:</span>
                                 <span className="info-value">{deviceInfo.device_type}</span>
                             </div>
 
                             {deviceInfo.is_advanced && (
                                 <>
                                     <div className="info-item">
-                                        <span className="info-label">📏 Screen:</span>
+                                        <span className="info-label">Screen:</span>
                                         <span className="info-value">{deviceInfo.screen_resolution}</span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="info-label">🕒 Timezone:</span>
+                                        <span className="info-label">Timezone:</span>
                                         <span className="info-value">{deviceInfo.timezone}</span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="info-label">🗣️ Language:</span>
+                                        <span className="info-label">Language:</span>
                                         <span className="info-value">{deviceInfo.language}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="info-label">GPU Model:</span>
+                                        <span className="info-value">
+                                            {deviceInfo.gpu_model && deviceInfo.gpu_model.length > 40
+                                                ? deviceInfo.gpu_model.substring(0, 40) + '...'
+                                                : deviceInfo.gpu_model || 'Unknown'}
+                                        </span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="info-label">AdBlock:</span>
+                                        <span className="info-value">
+                                            {deviceInfo.ad_block_status === 'enabled' ? 'Enabled' :
+                                                deviceInfo.ad_block_status === 'disabled' ? 'Not Detected' :
+                                                    'Cannot determine'}
+                                        </span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="info-label">Theme Preference:</span>
+                                        <span className="info-value">
+                                            {deviceInfo.dark_mode ? 'Dark Mode' : 'Light Mode'}
+                                        </span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="info-label">Browser Version:</span>
+                                        <span className="info-value">
+                                            {deviceInfo.browser_version}
+                                            {deviceInfo.browser_outdated && (
+                                                <span style={{ color: '#dc3545', fontWeight: 'bold' }}> (Outdated)</span>
+                                            )}
+                                            {!deviceInfo.browser_outdated && deviceInfo.browser_version !== 'Unknown' && (
+                                                <span style={{ color: '#28a745' }}> (Up to date)</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className="info-item uniqueness-item">
+                                        <span className="info-label">Uniqueness Score:</span>
+                                        <span className={`info-value uniqueness-${deviceInfo.uniqueness_score?.toLowerCase()}`}>
+                                            {deviceInfo.uniqueness_score || 'Unknown'}
+                                            <small style={{ display: 'block', fontSize: '0.85em', marginTop: '0.25rem' }}>
+                                                (~{deviceInfo.entropy_bits || 0} bits of entropy)
+                                            </small>
+                                        </span>
                                     </div>
                                 </>
                             )}
 
                             <div className="info-item">
-                                <span className="info-label">⏰ Scan Time:</span>
+                                <span className="info-label">Scan Time:</span>
                                 <span className="info-value">
                                     {new Date(deviceInfo.scan_time).toLocaleString()}
                                 </span>
                             </div>
-                        </div>
-                        <div className="info-note">
-                            <small>ℹ️ {deviceInfo.note}</small>
                         </div>
                     </div>
                 )}
             </div>
 
             {/* Email Breach Check Section */}
-            <div className="scan-section breach-check-section">
+            <div id="breach-check" className="scan-section breach-check-section">
                 <div className="section-header">
-                    <h2>🔓 Data Breach Checker</h2>
+                    <h2>Data Breach Checker</h2>
                     <p>Check if your email has been compromised in known data breaches</p>
                 </div>
 
@@ -387,21 +508,18 @@ const Scan = () => {
                         className="email-input"
                     />
                     <Buttonn
-                        text={breachLoading ? '⏳ Checking...' : '🔍 Check Breaches'}
+                        text={breachLoading ? 'Checking...' : 'Check Breaches'}
                         onClick={handleBreachCheck}
                         disabled={breachLoading}
                     />
                 </div>
 
-                {/* Privacy Trust Message */}
                 <div className="privacy-trust">
-                    <span className="lock-icon">🔒</span>
                     <span>Your email is only checked, never stored. <Link to="/privacy">Read Privacy Policy</Link></span>
                 </div>
 
                 {breachError && (
                     <div className="result-card error-card">
-                        <div className="card-icon">❌</div>
                         <div className="card-content">
                             <h3>Error</h3>
                             <p>{breachError}</p>
@@ -412,9 +530,6 @@ const Scan = () => {
                 {breachResult && (
                     <div className={`result-card ${breachResult.breaches.length === 0 ? 'success-card' : 'warning-card'}`}>
                         <div className="card-header">
-                            <div className="card-icon">
-                                {breachResult.breaches.length === 0 ? '🛡️' : '⚠️'}
-                            </div>
                             <h3>
                                 {breachResult.breaches.length === 0
                                     ? 'No Breaches Found!'
@@ -429,19 +544,19 @@ const Scan = () => {
 
                             {breachResult.breaches.length === 0 ? (
                                 <p className="breach-message">
-                                    ✅ Good news! Your email address hasn't appeared in any known data breaches.
+                                    Good news! Your email address hasn't appeared in any known data breaches.
                                 </p>
                             ) : (
                                 <div className="breach-list">
                                     {breachResult.breaches.map((breach, index) => (
                                         <div key={index} className="breach-item">
-                                            <h4>🔴 {breach.name}</h4>
+                                            <h4>{breach.name}</h4>
                                             <p><strong>Date:</strong> {breach.date}</p>
                                             <p><strong>Compromised Data:</strong> {breach.leaked_data.join(', ')}</p>
                                         </div>
                                     ))}
                                     <div className="breach-advice">
-                                        <strong>⚡ Recommendation:</strong>
+                                        <strong>Recommendation:</strong>
                                         <p>Change your password immediately for affected accounts. Enable two-factor authentication.</p>
                                     </div>
                                 </div>
@@ -451,21 +566,63 @@ const Scan = () => {
                 )}
             </div>
 
-            {/* Dynamic Tips Section */}
-            <div className="tips-section">
-                <div className="section-header">
-                    <h2>💡 Security Tips for You</h2>
+            {/* --- UPDATED TIPS SECTION WITH INLINE STYLES FOR CENTERING --- */}
+            <div id="security-tips" style={{
+                marginTop: '100px',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',    /* Centers everything horizontally */
+                textAlign: 'center',
+                paddingBottom: '50px'
+            }}>
+                <div className="section-header" style={{ marginBottom: '40px' }}>
+                    <h2>Security Tips for You</h2>
                     <p>{deviceInfo ? 'Personalized recommendations based on your scan' : 'General best practices for digital privacy'}</p>
                 </div>
-                <div className="tips-grid">
+
+                {/* Vertical Stack Container */}
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column', /* Stacks cards vertically */
+                    gap: '40px',             /* Space between cards */
+                    alignItems: 'center',    /* Centers the cards */
+                    width: '100%'
+                }}>
                     {tips.map((tip) => (
-                        <div className="paper-wrapper" key={tip.number}>
-                            <span className="paper-badge">{tip.number}</span>
-                            <Paper className='papers' title={tip.title} text={tip.text} />
+                        <div key={tip.number} style={{
+                            position: 'relative',
+                            width: '90%',        /* Responsive width */
+                            maxWidth: '600px',   /* Limits width to look like a wide card */
+                            margin: '0 auto'     /* Extra safety to center */
+                        }}>
+                            {/* Badge Number - Using Neon Green #ccff00 */}
+                            <span style={{
+                                position: 'absolute',
+                                top: '-15px',
+                                left: '-10px',
+                                backgroundColor: '#ccff00', 
+                                color: 'black',
+                                fontWeight: '800',
+                                fontSize: '1.2rem',
+                                padding: '5px 12px',
+                                borderRadius: '8px',
+                                boxShadow: '3px 3px 0 black',
+                                zIndex: 10,
+                                border: '2px solid black'
+                            }}>
+                                {tip.number}
+                            </span>
+
+                            {/* Wrapper to ensure Paper fills the space */}
+                            <div style={{ width: '100%' }}>
+                                <Paper className='papers' title={tip.title} text={tip.text} />
+                            </div>
                         </div>
                     ))}
                 </div>
             </div>
+            {/* --- END UPDATED SECTION --- */}
         </div>
     );
 };

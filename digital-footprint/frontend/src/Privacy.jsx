@@ -7,7 +7,7 @@ const Privacy = () => {
         <div className="scan-container">
             <div className="scan-section">
                 <div className="section-header">
-                    <h2>🔒 Privacy Policy</h2>
+                    <h2>Privacy Policy</h2>
                     <p>Transparency is our priority.</p>
                 </div>
 

@@ -3,15 +3,15 @@ import './App.css'
 import NavBar from './NavBar'
 import Hero from './Hero'
 import Scan from './Scan'
-import Tips from './Tips'
 import Privacy from './Privacy'
 
 function Home() {
   return (
     <>
-      <Hero />
+      <div id="home">
+        <Hero />
+      </div>
       <Scan />
-      <Tips />
     </>
   )
 }
