@@ -3,7 +3,7 @@
  * Provides methods to interact with the Flask backend endpoints
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://digital-footprint.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL ;
 /**
  * Auto-scan current device information
  * @param {Object} advancedData - Optional advanced fingerprint data (canvas, screen, etc.)
