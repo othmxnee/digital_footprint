@@ -11,15 +11,34 @@ import requests
 # Load environment variables
 load_dotenv()
 
-# --- config
+import os
+from flask import Flask
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+
 app = Flask(__name__)
 CORS(app)
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-db_path = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'whoami.db')}")
-app.config['SQLALCHEMY_DATABASE_URI'] = db_path
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+# Render PostgreSQL fix
+if DATABASE_URL:
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+else:
+    # Local fallback (development only)
+    DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'whoami.db')}"
+
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+with app.app_context():
+    db.create_all()
+    print("✓ Database initialized")
+
 
 # --- models
 class Scan(db.Model):
@@ -363,12 +382,3 @@ def health_check():
     """Simple health check endpoint"""
     return jsonify({"status": "healthy", "service": "whoMi backend"}), 200
 
-# --- bootstrap
-if __name__ == "__main__":
-    # Create database tables
-    with app.app_context():
-        db.create_all()
-        print("✓ Database initialized")
-    
-    print("🚀 Starting whoMi backend server on http://0.0.0.0:5000")
-    app.run(host="0.0.0.0", port=5000, debug=True)
